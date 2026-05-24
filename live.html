@@ -153,7 +153,7 @@
   <div class="container">
     <div class="header">
       <h1>🏆 Live Scoreboard</h1>
-      <p><span class="live-dot"></span>Auto-refreshing every 10 seconds</p>
+      <p><span class="live-dot"></span>Auto-refresh setiap 10 detik</p>
     </div>
 
     <div id="content">
@@ -161,12 +161,22 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
         </svg>
-        <h3>No scores yet</h3>
-        <div>Scores will appear here once examiners start submitting.</div>
+        <h3>Tidak ada nilai</h3>
+        <div>Nilai akan muncul setelah penguji input nilai.</div>
       </div>
     </div>
 
-    <div class="footer">Last updated: <span id="lastUpdate">--</span></div>
+    <div class="footer">Update terakhir: <span id="lastUpdate">--</span></div>
+  </div>
+
+
+  <!-- FAB Search -->
+  <div class="fab-search">
+    <div class="fab-input-wrap" id="fabInputWrap">
+      <input type="text" class="fab-input" id="fabInput" placeholder="Cari nama siswa..." autocomplete="off">
+      <button class="fab-clear" id="fabClear">×</button>
+    </div>
+    <button class="fab-btn" id="fabBtn">🔍</button>
   </div>
 
   <script>
@@ -205,7 +215,7 @@
 
       let html = '<div class="table-wrap"><table class="score-table"><thead><tr>';
       html += '<th style="width:60px;">Rank</th>';
-      html += '<th>Student</th>';
+      html += '<th>Nama siswa</th>';
       subjectNames.forEach(subj => {
         html += '<th style="text-align:right;">' + escapeHtml(subj) + '</th>';
       });
@@ -286,13 +296,11 @@
 
     function filterScores(query) {
       if (!query) {
-        // Show all
         document.querySelectorAll('.score-table tbody tr').forEach(tr => tr.classList.remove('hidden-row'));
         document.querySelectorAll('.score-card').forEach(card => card.classList.remove('hidden-card'));
         return;
       }
-      // Filter table rows
-      document.querySelectorAll('.score-table tbody tr').forEach((tr, idx) => {
+      document.querySelectorAll('.score-table tbody tr').forEach((tr) => {
         const name = tr.querySelector('.student-name');
         if (name && name.textContent.toLowerCase().includes(query)) {
           tr.classList.remove('hidden-row');
@@ -300,8 +308,7 @@
           tr.classList.add('hidden-row');
         }
       });
-      // Filter cards
-      document.querySelectorAll('.score-card').forEach((card, idx) => {
+      document.querySelectorAll('.score-card').forEach((card) => {
         const name = card.querySelector('.card-name');
         if (name && name.textContent.toLowerCase().includes(query)) {
           card.classList.remove('hidden-card');
@@ -314,15 +321,5 @@
     loadScores();
     setInterval(loadScores, 10000);
   </script>
-
-  <!-- FAB Search -->
-  <div class="fab-search">
-    <div class="fab-input-wrap" id="fabInputWrap">
-      <input type="text" class="fab-input" id="fabInput" placeholder="Cari nama siswa..." autocomplete="off">
-      <button class="fab-clear" id="fabClear">×</button>
-    </div>
-    <button class="fab-btn" id="fabBtn">🔍</button>
-  </div>
-
 </body>
 </html>
