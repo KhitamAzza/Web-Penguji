@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#0f172a">
   <title>Live Scoreboard</title>
   <style>
@@ -15,10 +15,10 @@
       min-height: 100dvh;
       -webkit-font-smoothing: antialiased;
     }
-    .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
-    .header { text-align: center; margin-bottom: 32px; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 32px 20px; }
+    .header { text-align: center; margin-bottom: 28px; }
     .header h1 {
-      margin: 0; font-size: 2.2rem;
+      margin: 0; font-size: clamp(1.5rem, 4vw, 2.2rem);
       background: linear-gradient(90deg, #38bdf8, #818cf8);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -27,34 +27,62 @@
     }
     .header p { margin: 8px 0 0; color: #64748b; font-size: 0.85rem; }
 
-    .table-wrap { overflow-x: auto; }
+    /* ─── DESKTOP TABLE ─── */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .score-table {
-      width: 100%; border-collapse: separate; border-spacing: 0 8px;
-      min-width: 500px;
+      width: 100%; border-collapse: separate; border-spacing: 0 6px;
+      min-width: 600px;
     }
     .score-table thead th {
-      text-align: left; padding: 14px 16px;
+      text-align: left; padding: 12px 14px;
       font-size: 0.7rem; text-transform: uppercase;
-      letter-spacing: 0.8px; color: #94a3b8;
+      letter-spacing: 0.6px; color: #94a3b8;
       font-weight: 700; border-bottom: 2px solid #334155;
       white-space: nowrap;
     }
-    .score-table thead th:last-child,
-    .score-table tbody td:last-child { text-align: right; }
-    .score-table tbody tr { background: #1e293b; transition: transform 0.2s, background 0.2s; }
-    .score-table tbody tr:hover { background: #27354f; transform: scale(1.005); }
-    .score-table tbody td { padding: 18px 16px; border: none; vertical-align: middle; }
-    .score-table tbody tr td:first-child { border-radius: 12px 0 0 12px; }
-    .score-table tbody tr td:last-child { border-radius: 0 12px 12px 0; }
+    .score-table thead th:nth-child(n+3) { text-align: right; }
+    .score-table tbody tr { background: #1e293b; transition: all 0.2s; }
+    .score-table tbody tr:hover { background: #27354f; transform: scale(1.003); }
+    .score-table tbody td { padding: 16px 14px; border: none; vertical-align: middle; }
+    .score-table tbody tr td:first-child { border-radius: 10px 0 0 10px; }
+    .score-table tbody tr td:last-child { border-radius: 0 10px 10px 0; }
+    .score-table tbody td:nth-child(n+3) { text-align: right; }
 
-    .rank { font-size: 1.5rem; font-weight: 800; color: #38bdf8; width: 60px; }
+    .rank { font-size: 1.3rem; font-weight: 800; color: #38bdf8; width: 50px; text-align: center; }
     .rank.gold { color: #fbbf24; }
     .rank.silver { color: #cbd5e1; }
     .rank.bronze { color: #f97316; }
-    .student-name { font-size: 1.1rem; font-weight: 600; color: #f1f5f9; }
-    .student-id { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
-    .subject-score { font-size: 0.9rem; color: #cbd5e1; text-align: right; font-variant-numeric: tabular-nums; }
-    .total-score { font-size: 1.6rem; font-weight: 800; color: #4ade80; text-align: right; }
+    .student-name { font-size: 1rem; font-weight: 600; color: #f1f5f9; }
+    .student-id { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+    .subject-score { font-size: 0.9rem; color: #cbd5e1; font-variant-numeric: tabular-nums; }
+    .total-score { font-size: 1.3rem; font-weight: 800; color: #4ade80; }
+
+    /* ─── MOBILE CARDS ─── */
+    .cards-grid { display: none; }
+    .score-card {
+      background: #1e293b; border-radius: 14px; padding: 18px 20px;
+      margin-bottom: 12px; border: 1px solid #334155;
+      transition: transform 0.15s;
+    }
+    .score-card:active { transform: scale(0.98); }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+    .card-rank {
+      font-size: 1.6rem; font-weight: 800; color: #38bdf8;
+      min-width: 40px; text-align: center;
+    }
+    .card-rank.gold { color: #fbbf24; }
+    .card-rank.silver { color: #cbd5e1; }
+    .card-rank.bronze { color: #f97316; }
+    .card-info { flex: 1; margin-left: 12px; }
+    .card-name { font-size: 1.1rem; font-weight: 700; color: #f1f5f9; }
+    .card-id { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+    .card-total { text-align: right; }
+    .card-total-label { font-size: 0.65rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .card-total-value { font-size: 1.5rem; font-weight: 800; color: #4ade80; }
+    .card-subjects { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .card-subject { background: #0f172a; border-radius: 10px; padding: 10px 12px; }
+    .card-subject-name { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+    .card-subject-value { font-size: 1.1rem; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; }
 
     .empty-state { text-align: center; padding: 60px 20px; color: #64748b; }
     .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.3; }
@@ -62,14 +90,6 @@
     .footer { text-align: center; margin-top: 24px; font-size: 0.75rem; color: #475569; }
     .live-dot { display: inline-block; width: 8px; height: 8px; background: #4ade80; border-radius: 50%; margin-right: 6px; animation: pulse 2s infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
-    @media (max-width: 600px) {
-      .container { padding: 20px 12px; }
-      .header h1 { font-size: 1.6rem; }
-      .total-score { font-size: 1.3rem; }
-      .student-name { font-size: 0.95rem; }
-      .score-table tbody td { padding: 14px 10px; }
-    }
 
     /* ─── FAB SEARCH ─── */
     .fab-search {
@@ -140,13 +160,23 @@
     .fab-input-wrap.open .fab-clear { display: block; }
     .fab-clear:active { color: #e2e8f0; }
 
-    /* Highlight matched rows */
+    /* Filter hidden states */
     .score-table tbody tr.hidden-row { display: none; }
     .score-card.hidden-card { display: none; }
-    .highlight { background: rgba(56, 189, 248, 0.15) !important; }
 
+    /* ─── RESPONSIVE BREAKPOINT ─── */
+    @media (max-width: 768px) {
+      .container { padding: 20px 14px; }
+      .table-wrap { display: none; }
+      .cards-grid { display: block; }
+      .header { margin-bottom: 20px; }
+    }
+
+    @media (max-width: 480px) {
+      .card-subjects { grid-template-columns: 1fr; }
+      .card-header { margin-bottom: 12px; }
+    }
   </style>
-<base target="_blank">
 <base target="_blank">
 </head>
 <body>
@@ -161,14 +191,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
         </svg>
-        <h3>Tidak ada nilai</h3>
-        <div>Nilai akan muncul setelah penguji input nilai.</div>
+        <h3>Belum ada nilai</h3>
+        <div>Nilai akan muncul begitu penguji input nilai.</div>
       </div>
     </div>
 
     <div class="footer">Update terakhir: <span id="lastUpdate">--</span></div>
   </div>
-
 
   <!-- FAB Search -->
   <div class="fab-search">
@@ -180,9 +209,6 @@
   </div>
 
   <script>
-    // ═══════════════════════════════════════════════════
-    // CONFIG - Replace with your Apps Script Web App URL
-    // ═══════════════════════════════════════════════════
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbyw2vC9JWBibrjY3y60YxOmhqPfIroHIOoT_bJzuMkp1RVbZO_ThGiWoxJrVtwRT18_rw/exec';
 
     async function api(action, payload = {}) {
@@ -207,20 +233,20 @@
       const container = document.getElementById('content');
       if (!scores || scores.length === 0) return;
 
-      // Extract subject names from first row
       let subjectNames = [];
       if (scores[0] && scores[0].subjects) {
         subjectNames = Object.keys(scores[0].subjects);
       }
 
-      let html = '<div class="table-wrap"><table class="score-table"><thead><tr>';
-      html += '<th style="width:60px;">Rank</th>';
-      html += '<th>Nama siswa</th>';
+      // ─── DESKTOP TABLE ───
+      let tableHtml = '<div class="table-wrap"><table class="score-table"><thead><tr>';
+      tableHtml += '<th>#</th>';
+      tableHtml += '<th>Nama Siswa</th>';
       subjectNames.forEach(subj => {
-        html += '<th style="text-align:right;">' + escapeHtml(subj) + '</th>';
+        tableHtml += '<th>' + escapeHtml(subj) + '</th>';
       });
-      html += '<th style="text-align:right;">Total</th>';
-      html += '</tr></thead><tbody>';
+      tableHtml += '<th>Total</th>';
+      tableHtml += '</tr></thead><tbody>';
 
       scores.forEach((s, idx) => {
         let rc = '';
@@ -228,21 +254,59 @@
         else if (idx === 1) rc = 'silver';
         else if (idx === 2) rc = 'bronze';
 
-        html += '<tr>';
-        html += '<td class="rank ' + rc + '">' + s.rank + '</td>';
-        html += '<td><div class="student-name">' + escapeHtml(s.name) + '</div><div class="student-id">' + escapeHtml(s.id) + '</div></td>';
+        tableHtml += '<tr>';
+        tableHtml += '<td class="rank ' + rc + '">' + s.rank + '</td>';
+        tableHtml += '<td><div class="student-name">' + escapeHtml(s.name) + '</div><div class="student-id">' + escapeHtml(s.id) + '</div></td>';
 
         subjectNames.forEach(subj => {
           const val = s.subjects && s.subjects[subj];
-          html += '<td class="subject-score">' + (val !== undefined && val !== '' ? val.toFixed(1) : '-') + '</td>';
+          tableHtml += '<td class="subject-score">' + (val !== undefined && val !== '' ? val.toFixed(1) : '-') + '</td>';
         });
 
-        html += '<td class="total-score">' + (s.total ? s.total.toFixed(1) : '-') + '</td>';
-        html += '</tr>';
+        tableHtml += '<td class="total-score">' + (s.total ? s.total.toFixed(1) : '-') + '</td>';
+        tableHtml += '</tr>';
       });
 
-      html += '</tbody></table></div>';
-      container.innerHTML = html;
+      tableHtml += '</tbody></table></div>';
+
+      // ─── MOBILE CARDS ───
+      let cardsHtml = '<div class="cards-grid">';
+
+      scores.forEach((s, idx) => {
+        let rc = '';
+        if (idx === 0) rc = 'gold';
+        else if (idx === 1) rc = 'silver';
+        else if (idx === 2) rc = 'bronze';
+
+        cardsHtml += '<div class="score-card">';
+        cardsHtml += '<div class="card-header">';
+        cardsHtml += '<div class="card-rank ' + rc + '">' + s.rank + '</div>';
+        cardsHtml += '<div class="card-info">';
+        cardsHtml += '<div class="card-name">' + escapeHtml(s.name) + '</div>';
+        cardsHtml += '<div class="card-id">' + escapeHtml(s.id) + '</div>';
+        cardsHtml += '</div>';
+        cardsHtml += '<div class="card-total">';
+        cardsHtml += '<div class="card-total-label">Total</div>';
+        cardsHtml += '<div class="card-total-value">' + (s.total ? s.total.toFixed(1) : '-') + '</div>';
+        cardsHtml += '</div>';
+        cardsHtml += '</div>';
+
+        cardsHtml += '<div class="card-subjects">';
+        subjectNames.forEach(subj => {
+          const val = s.subjects && s.subjects[subj];
+          cardsHtml += '<div class="card-subject">';
+          cardsHtml += '<div class="card-subject-name">' + escapeHtml(subj) + '</div>';
+          cardsHtml += '<div class="card-subject-value">' + (val !== undefined && val !== '' ? val.toFixed(1) : '-') + '</div>';
+          cardsHtml += '</div>';
+        });
+        cardsHtml += '</div>';
+
+        cardsHtml += '</div>';
+      });
+
+      cardsHtml += '</div>';
+
+      container.innerHTML = tableHtml + cardsHtml;
     }
 
     function escapeHtml(text) {
@@ -251,11 +315,7 @@
       return div.innerHTML;
     }
 
-
     // ─── FAB SEARCH ───
-    let allScores = [];
-    let subjectNamesCache = [];
-
     const fabBtn = document.getElementById('fabBtn');
     const fabInputWrap = document.getElementById('fabInputWrap');
     const fabInput = document.getElementById('fabInput');
