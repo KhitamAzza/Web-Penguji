@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#667eea">
+  
+  <title>Exam Scoring</title>
+  <link rel="stylesheet" href="index/style.css">
+
+<base target="_blank">
+<base target="_blank">
+</head>
+<body>
+<div class="loading-overlay hidden" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loadingText">Aplikasi sedang memuat</div>
+  <div class="loading-subtext" id="loadingSubtext">Mohon tunggu, sedang menyiapkan data ujian...</div>
+  <div class="loading-progress">
+    <div class="loading-progress-bar" id="loadingProgressBar"></div>
+  </div>
+</div>
+
+  <div class="app">
+    <div class="header">
+      <h1>📝 Exam Scoring</h1>
+      <p>Enter PIN to begin</p>
+    </div>
+
+    <div class="content">
+      <div id="loginScreen">
+        <div class="login-box">
+          <input type="password" id="pinInput" class="pin-input" maxlength="4" placeholder="••••" inputmode="numeric" autocomplete="off">
+          <div class="login-error" id="loginError">PIN salah atau tidak aktif</div>
+          <button class="btn" onclick="doLogin()">Enter</button>
+        </div>
+      </div>
+
+      <div id="mainScreen" class="hidden">
+        <div class="user-bar">
+          <span><span id="userName">User</span> <span class="badge" id="userRole">Role</span></span>
+          <a class="logout-link" onclick="doLogout()">Logout</a>
+        </div>
+
+        <div id="adminSection" class="section hidden">
+          <div class="section-title">⚙️ Admin Controls</div>
+          <label style="font-size:0.8rem; color:#64748b; margin-bottom:6px; display:block; font-weight:500;">Select Current Student</label>
+          <select id="studentSelect"><option value="">-- Choose student --</option></select>
+          <button class="btn btn-sm" onclick="setCurrentStudent()">Set as Current</button>
+
+          <div style="margin-top:20px;">
+            <div class="section-title">👥 Active Examiners</div>
+            <div id="examinerList"></div>
+          </div>
+        </div>
+
+        <div id="scoringSection">
+          <div class="student-card" id="studentCard">
+            <div class="student-label">Now Presenting</div>
+            <img id="studentPhoto" class="student-photo" src="" alt="">
+            <div class="student-name" id="studentName">Loading...</div>
+            <div class="student-id" id="studentId">--</div>
+          </div>
+
+          <div class="locked-banner" id="lockedBanner">🔒 Anda sudah memberi nilai untuk siswa ini</div>
+          <div class="section">
+            <div class="section-title">📊 Score Criteria</div>
+            <div id="criteriaGrid"></div>
+          </div>
+
+          <button class="btn btn-green" id="btnSubmit" onclick="submitScores()" style="font-size:1.1rem; padding:18px;">
+            ✅ Submit Scores
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Message</div>
+
+<script src="index/script.js"></script>
+</body>
+</html>
