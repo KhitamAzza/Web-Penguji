@@ -382,13 +382,13 @@
  <script>
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbyw2vC9JWBibrjY3y60YxOmhqPfIroHIOoT_bJzuMkp1RVbZO_ThGiWoxJrVtwRT18_rw/exec';
 
-  // ─── Audio System (Web Audio API) ───
+  // ─── Audio System ───
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   document.addEventListener('click', () => {
     if (audioCtx.state === 'suspended') audioCtx.resume();
   }, { once: true });
 
-  function playTone(freq, duration, type = 'sine', vol = 0.1) {
+  function playTone(freq, duration, type = 'sine', vol = 0.08) {
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
@@ -400,12 +400,10 @@
     osc.start();
     osc.stop(audioCtx.currentTime + duration);
   }
-
   function playScoreAdded() {
     playTone(523, 0.18);
     setTimeout(() => playTone(659, 0.18), 80);
   }
-
   function playAllDone() {
     playTone(523, 0.2);
     setTimeout(() => playTone(659, 0.2), 120);
@@ -426,7 +424,7 @@
   let maxTotal = 100;
   let currentExaminerCount = 0;
   let currentMissingNames = [];
-  let currentExaminerScores = []; // NEW: track raw scores array
+  let currentExaminerScores = [];
 
   // Clock
   setInterval(() => {
@@ -445,6 +443,22 @@
     }
     return `rgb(${r}, ${g}, ${b})`;
   }
+
+  // Robust snapshot comparison
+  function snapshotKey(student, scoreData, activeExaminers) {
+    if (!student) return 'waiting';
+    const final = scoreData ? (parseFloat(scoreData.final) || 0) : 0;
+    const exScores = scoreData ? (scoreData.examinerScores || []) : [];
+    const missing = activeExaminers.filter((_, i) => i >= exScores.length).map(e => e.name).sort();
+    return JSON.stringify({
+      id: student.id,
+      final: Math.round(final * 100) / 100, // Round to 2 decimals
+      scores: exScores.map(s => Math.round(parseFloat(s) * 100) / 100),
+      missing: missing
+    });
+  }
+
+  let lastSnapshot = '';
 
   async function loadPresentation() {
     try {
@@ -467,47 +481,44 @@
           currentExaminerCount = 0;
           currentMissingNames = [];
           currentExaminerScores = [];
+          lastSnapshot = '';
         }
         return;
       }
 
       const studentScore = scores.find(s => s.id === student.id) || null;
       const examinerScores = studentScore ? (studentScore.examinerScores || []) : [];
-      // FIX 1: Sort active examiners by name so order is STABLE across polls
+      // FIX: Sort examiners by name so order is STABLE across polls
       const activeExaminers = examiners.filter(e => e.active).sort((a, b) => a.name.localeCompare(b.name));
       const scoredCount = examinerScores.length;
       const totalActive = activeExaminers.length;
       const missingExaminers = activeExaminers.slice(scoredCount);
       const missingNames = missingExaminers.map(e => e.name).sort();
-      // FIX 2: Parse final as float so string/number mismatches don't trigger false re-renders
       const final = studentScore ? (parseFloat(studentScore.final) || 0) : 0;
       const allDone = scoredCount >= totalActive && totalActive > 0;
 
-      // ─── Robust change detection ───
+      // ─── Robust change detection via snapshot ───
+      const snapshot = snapshotKey(student, studentScore, activeExaminers);
       const isNewStudent = currentStudentId !== student.id;
-      // FIX 3: Epsilon compare for total to ignore tiny floating-point jitter
-      const totalChanged = Math.abs(currentTotal - final) > 0.05;
-      const countChanged = currentExaminerCount !== scoredCount;
-      // FIX 4: Deep-compare the actual scores array
-      const scoresChanged = JSON.stringify(currentExaminerScores) !== JSON.stringify(examinerScores);
-      const missingChanged = JSON.stringify(currentMissingNames) !== JSON.stringify(missingNames);
+      const hasChanged = snapshot !== lastSnapshot;
 
-      if (!isNewStudent && !totalChanged && !countChanged && !scoresChanged && !missingChanged) {
-        return; // Nothing actually changed — skip re-render entirely
+      if (!isNewStudent && !hasChanged) {
+        return; // NOTHING changed — absolutely skip re-render
       }
 
       // ─── PLAY SOUND CUES ───
-      if (!isNewStudent && countChanged && scoredCount > currentExaminerCount) {
+      if (!isNewStudent && scoredCount > currentExaminerCount) {
         if (allDone) playAllDone();
         else playScoreAdded();
       }
 
-      // Update tracking variables ONLY when we are actually going to render
+      // Update tracking
       currentStudentId = student.id;
       currentTotal = final;
       currentExaminerCount = scoredCount;
       currentMissingNames = missingNames;
       currentExaminerScores = examinerScores;
+      lastSnapshot = snapshot;
 
       renderStudent(student, studentScore, missingExaminers, scoredCount, totalActive, isNewStudent, totalActive);
     } catch (err) {
