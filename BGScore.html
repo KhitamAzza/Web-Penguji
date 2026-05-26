@@ -351,6 +351,7 @@
     }
   </style>
 <base target="_blank">
+<base target="_blank">
 </head>
 <body>
   <div class="bg-mesh"></div>
@@ -381,6 +382,37 @@
   <script>
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbyw2vC9JWBibrjY3y60YxOmhqPfIroHIOoT_bJzuMkp1RVbZO_ThGiWoxJrVtwRT18_rw/exec';
 
+    // ─── Audio System (Web Audio API) ───
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    document.addEventListener('click', () => {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }, { once: true });
+
+    function playTone(freq, duration, type = 'sine', vol = 0.1) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function playScoreAdded() {
+      playTone(523, 0.18);        // C5
+      setTimeout(() => playTone(659, 0.18), 80); // E5
+    }
+
+    function playAllDone() {
+      playTone(523, 0.2);
+      setTimeout(() => playTone(659, 0.2), 120);
+      setTimeout(() => playTone(784, 0.3), 240);
+      setTimeout(() => playTone(1047, 0.5), 360);
+    }
+
     async function api(action, payload = {}) {
       const res = await fetch(GAS_URL, {
         method: 'POST',
@@ -403,16 +435,16 @@
 
     // Color interpolation: red (0) -> yellow (0.5) -> green (1)
     function scoreColor(pct) {
-  let r, g, b;
-  if (pct <= 0.5) {
-    const t = pct * 2;
-    r = 220; g = Math.round(50 + (140 * t)); b = 50;
-  } else {
-    const t = (pct - 0.5) * 2;
-    r = Math.round(220 - (170 * t)); g = 190; b = 50;
-  }
-  return `rgb(${r}, ${g}, ${b})`;
-}
+      let r, g, b;
+      if (pct <= 0.5) {
+        const t = pct * 2;
+        r = 220; g = Math.round(50 + (140 * t)); b = 50;
+      } else {
+        const t = (pct - 0.5) * 2;
+        r = Math.round(220 - (170 * t)); g = 190; b = 50;
+      }
+      return `rgb(${r}, ${g}, ${b})`;
+    }
 
     async function loadPresentation() {
       try {
@@ -443,15 +475,22 @@
         const missingExaminers = activeExaminers.slice(scoredCount);
         const missingNames = missingExaminers.map(e => e.name).sort();
         const final = studentScore ? studentScore.final : 0;
+        const allDone = scoredCount >= totalActive && totalActive > 0;
 
         // Check if anything changed
         const isNewStudent = currentStudentId !== student.id;
-        const totalChanged = currentTotal !== final;
+        const totalChanged = currentTotal !== final && final > 0;
         const countChanged = currentExaminerCount !== scoredCount;
         const missingChanged = JSON.stringify(currentMissingNames) !== JSON.stringify(missingNames);
 
         if (!isNewStudent && !totalChanged && !countChanged && !missingChanged) {
           return; // Nothing changed — skip re-render
+        }
+
+        // ─── PLAY SOUND CUES ───
+        if (!isNewStudent && countChanged && scoredCount > currentExaminerCount) {
+          if (allDone) playAllDone();
+          else playScoreAdded();
         }
 
         // Update tracking variables
