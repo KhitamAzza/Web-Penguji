@@ -500,6 +500,11 @@
         const final = studentScore ? (parseFloat(studentScore.final) || 0) : 0;
         const allDone = scoredCount >= totalActive && totalActive > 0;
 
+        // ─── FIX: Declare isNewStudent BEFORE using it ───
+        const isNewStudent = currentStudentId !== student.id;
+        const snapshot = snapshotKey(student, studentScore, totalActive);
+        const hasChanged = snapshot !== lastSnapshot;
+
         // Cache for Space reveal
         cachedStudent = student;
         cachedScoreData = studentScore;
@@ -511,10 +516,6 @@
           isRevealed = false;
           if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
         }
-
-        const isNewStudent = currentStudentId !== student.id;
-        const snapshot = snapshotKey(student, studentScore, totalActive);
-        const hasChanged = snapshot !== lastSnapshot;
 
         if (!isNewStudent && !hasChanged) {
           return;
