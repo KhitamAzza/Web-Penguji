@@ -426,6 +426,15 @@
     let currentExaminerScores = [];
     let lastSnapshot = '';
 
+    // ─── Fake Reveal State ───
+    let isRevealed = false;
+    let fakeNumberTimer = null;
+    let justRevealed = false;
+    let cachedStudent = null;
+    let cachedScoreData = null;
+    let cachedScoredCount = 0;
+    let cachedTotalActive = 0;
+
     // Clock
     setInterval(() => {
       document.getElementById('clock').textContent =
@@ -444,7 +453,6 @@
       return `rgb(${r}, ${g}, ${b})`;
     }
 
-    // Robust snapshot: only what we actually display
     function snapshotKey(student, scoreData, totalActive) {
       if (!student) return 'waiting';
       const final = scoreData ? (parseFloat(scoreData.final) || 0) : 0;
@@ -478,6 +486,8 @@
             currentExaminerCount = 0;
             currentExaminerScores = [];
             lastSnapshot = '';
+            isRevealed = false;
+            if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
           }
           return;
         }
@@ -490,18 +500,35 @@
         const final = studentScore ? (parseFloat(studentScore.final) || 0) : 0;
         const allDone = scoredCount >= totalActive && totalActive > 0;
 
+        // Cache for Space reveal
+        cachedStudent = student;
+        cachedScoreData = studentScore;
+        cachedScoredCount = scoredCount;
+        cachedTotalActive = totalActive;
+
+        // Reset reveal on new student or if not all done
+        if (isNewStudent || !allDone) {
+          isRevealed = false;
+          if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
+        }
+
         const isNewStudent = currentStudentId !== student.id;
         const snapshot = snapshotKey(student, studentScore, totalActive);
         const hasChanged = snapshot !== lastSnapshot;
 
         if (!isNewStudent && !hasChanged) {
-          return; // Nothing changed — skip re-render
+          return;
         }
 
         // ─── PLAY SOUND CUES ───
         if (!isNewStudent && scoredCount > currentExaminerCount) {
-          if (allDone) playAllDone();
-          else playScoreAdded();
+          if (allDone && !isRevealed) {
+            // Entering fake mode — silent, wait for Space reveal
+          } else if (allDone) {
+            playAllDone();
+          } else {
+            playScoreAdded();
+          }
         }
 
         // Update tracking
@@ -533,37 +560,56 @@
       const main = document.getElementById('main');
       const statusEl = document.getElementById('status');
 
+      // Clean up any running fake timer before rebuilding DOM
+      if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
+
       const final = scoreData ? scoreData.final : 0;
       const examinerScores = scoreData ? (scoreData.examinerScores || []) : [];
       const allDone = scoredCount >= totalActive && totalActive > 0;
+      const showFake = allDone && !isRevealed;
+
       const pct = maxTotal > 0 ? Math.min(final / maxTotal, 1) : 0;
-      const color = allDone ? scoreColor(pct) : '#f59e0b';
+      const color = (allDone && isRevealed) ? scoreColor(pct) : '#f59e0b';
 
       const r = 110;
       const circumference = 2 * Math.PI * r;
-      const offset = allDone ? circumference - (pct * circumference) : circumference * 0.25;
+      const offset = (allDone && isRevealed) ? circumference - (pct * circumference) : circumference * 0.25;
 
-      const didChange = !isNewStudent && currentTotal !== final && final > 0;
+      const didChange = (!isNewStudent && currentTotal !== final && final > 0) || justRevealed;
 
-      // ─── Build generic examiner slots (no names, just numbers) ───
+      // ─── Build generic examiner slots ───
       let barsHtml = '';
       for (let i = 0; i < totalActive; i++) {
         const delay = (i * 0.1).toFixed(2);
         if (i < scoredCount) {
-          const exScore = examinerScores[i];
-          const exPct = maxTotal > 0 ? Math.min(exScore / maxTotal, 1) : 0;
-          const exColor = scoreColor(exPct);
-          barsHtml += `
-            <div class="bar-row" style="animation-delay: ${delay}s">
-              <div class="bar-track">
-                <div class="bar-fill" id="bar-${i}"
-                  style="width: 0%; background: ${exColor};">
-                  <span class="bar-fill-text">${Number(exScore).toFixed(1)}</span>
+          if (showFake) {
+            // Fake mode: show confirmation text instead of score
+            barsHtml += `
+              <div class="bar-row" style="animation-delay: ${delay}s">
+                <div class="bar-track">
+                  <div class="bar-fill waiting" style="width: 100%;">
+                    <span class="bar-fill-text waiting-text">Penguji ${i + 1} sudah mengirim nilai ✓</span>
+                  </div>
                 </div>
+                <div class="bar-label">Penguji ${i + 1}</div>
               </div>
-              <div class="bar-label">Penguji ${i + 1}<span class="check">✓</span></div>
-            </div>
-          `;
+            `;
+          } else {
+            const exScore = examinerScores[i];
+            const exPct = maxTotal > 0 ? Math.min(exScore / maxTotal, 1) : 0;
+            const exColor = scoreColor(exPct);
+            barsHtml += `
+              <div class="bar-row" style="animation-delay: ${delay}s">
+                <div class="bar-track">
+                  <div class="bar-fill" id="bar-${i}"
+                    style="width: 0%; background: ${exColor};">
+                    <span class="bar-fill-text">${Number(exScore).toFixed(1)}</span>
+                  </div>
+                </div>
+                <div class="bar-label">Penguji ${i + 1}<span class="check">✓</span></div>
+              </div>
+            `;
+          }
         } else {
           barsHtml += `
             <div class="bar-row" style="animation-delay: ${delay}s">
@@ -578,14 +624,21 @@
         }
       }
 
-      const statusText = allDone
-        ? `${scoredCount} dari ${totalActive} penguji telah menilai`
-        : `${scoredCount} dari ${totalActive} penguji — Menunggu penilaian`;
+      const statusText = showFake
+        ? `Semua penguji telah menilai — Tekan <b>SPASI</b> untuk membuka nilai`
+        : allDone
+          ? `${scoredCount} dari ${totalActive} penguji telah menilai`
+          : `${scoredCount} dari ${totalActive} penguji — Menunggu penilaian`;
 
-      const circleClass = allDone ? '' : 'processing';
-      const circleNumber = allDone ? (final > 0 ? Number(final).toFixed(1) : '0') : '...';
-      const circleLabel = allDone ? 'Total Nilai' : 'Nilai Akhir';
-      const processingText = allDone ? '' : '<div class="processing-text">Menunggu nilai</div>';
+      const circleClass = (allDone && isRevealed) ? '' : 'processing';
+      const circleNumber = showFake
+        ? Math.floor(Math.random() * 46 + 50)
+        : (allDone ? (final > 0 ? Number(final).toFixed(1) : '0') : '...');
+      const circleLabel = 'Nilai Akhir';
+      const circlePct = showFake
+        ? `${scoredCount}/${totalActive}`
+        : (allDone ? Math.round(pct * 100) + '%' : scoredCount + '/' + totalActive);
+      const processingText = (allDone && isRevealed) ? '' : '<div class="processing-text">Menunggu nilai</div>';
 
       main.innerHTML = `
         <div class="student-header">
@@ -605,11 +658,11 @@
           </svg>
           <div class="circle-inner">
             <div class="circle-number ${didChange ? 'pop' : ''}" id="circleNum"
-              style="color: ${allDone ? color : '#fbbf24'}">
+              style="color: ${(allDone && isRevealed) ? color : '#fbbf24'}">
               ${circleNumber}
             </div>
             <div class="circle-label">${circleLabel}</div>
-            <div class="circle-pct">${allDone ? Math.round(pct * 100) + '%' : scoredCount + '/' + totalActive}</div>
+            <div class="circle-pct">${circlePct}</div>
             ${processingText}
           </div>
         </div>
@@ -622,13 +675,23 @@
 
       statusEl.innerHTML = `<span class="status-dot"></span>${statusText}`;
 
+      // Cycle random numbers in fake mode
+      if (showFake) {
+        fakeNumberTimer = setInterval(() => {
+          const num = document.getElementById('circleNum');
+          if (num) num.textContent = Math.floor(Math.random() * 46 + 50);
+        }, 400);
+      }
+
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          examinerScores.forEach((exScore, idx) => {
-            const exPct = maxTotal > 0 ? Math.min(exScore / maxTotal, 1) : 0;
-            const bar = document.getElementById(`bar-${idx}`);
-            if (bar) bar.style.width = Math.max(exPct * 100, 3) + '%';
-          });
+          if (!showFake) {
+            examinerScores.forEach((exScore, idx) => {
+              const exPct = maxTotal > 0 ? Math.min(exScore / maxTotal, 1) : 0;
+              const bar = document.getElementById(`bar-${idx}`);
+              if (bar) bar.style.width = Math.max(exPct * 100, 3) + '%';
+            });
+          }
           const stroke = document.getElementById('circleStroke');
           if (stroke) stroke.style.strokeDashoffset = offset;
         });
@@ -647,6 +710,19 @@
       div.textContent = text;
       return div.innerHTML;
     }
+
+    // ─── Space Reveal ───
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !isRevealed && cachedStudent && cachedScoredCount >= cachedTotalActive && cachedTotalActive > 0) {
+        e.preventDefault();
+        isRevealed = true;
+        if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
+        justRevealed = true;
+        playAllDone();
+        renderStudent(cachedStudent, cachedScoreData, cachedScoredCount, cachedTotalActive, false);
+        justRevealed = false;
+      }
+    });
 
     loadPresentation();
     setInterval(loadPresentation, 5000);
