@@ -349,384 +349,326 @@
       .missing-pills { gap: 6px; }
       .missing-pill { padding: 5px 10px; font-size: 0.7rem; }
     }
-  </style>
-<base target="_blank">
-<base target="_blank">
-</head>
-<body>
-  <div class="bg-mesh"></div>
-  <div class="bg-noise"></div>
+  <script>
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbyw2vC9JWBibrjY3y60YxOmhqPfIroHIOoT_bJzuMkp1RVbZO_ThGiWoxJrVtwRT18_rw/exec';
 
-  <div class="screen">
-    <div class="top-bar">
-      <div class="brand">
-        <div class="brand-dot"></div>
-        <span>Live Scoring</span>
-      </div>
-      <div class="clock" id="clock">--:--</div>
-    </div>
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  document.addEventListener('click', () => {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }, { once: true });
 
-    <div class="main" id="main">
+  function playTone(freq, duration, type = 'sine', vol = 0.08) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  }
+  function playAllDone() {
+    playTone(523, 0.2);
+    setTimeout(() => playTone(659, 0.2), 120);
+    setTimeout(() => playTone(784, 0.3), 240);
+    setTimeout(() => playTone(1047, 0.5), 360);
+  }
+
+  async function api(action, payload = {}) {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action, ...payload })
+    });
+    return res.json();
+  }
+
+  let currentStudentId = null;
+  let currentTotal = 0;
+  let maxTotal = 100;
+  let currentExaminerCount = 0;
+  let currentExaminerScores = [];
+  let lastSnapshot = '';
+
+  let isRevealed = false;
+  let fakeNumberTimer = null;
+  let justRevealed = false;
+  let cachedStudent = null;
+  let cachedScoreData = null;
+  let cachedScoredCount = 0;
+  let cachedTotalActive = 0;
+
+  setInterval(() => {
+    document.getElementById('clock').textContent =
+      new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }, 1000);
+
+  function scoreColor(pct) {
+    let r, g, b;
+    if (pct <= 0.5) {
+      const t = pct * 2;
+      r = 220; g = Math.round(50 + (140 * t)); b = 50;
+    } else {
+      const t = (pct - 0.5) * 2;
+      r = Math.round(220 - (170 * t)); g = 190; b = 50;
+    }
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  function snapshotKey(student, scoreData, totalActive) {
+    if (!student) return 'waiting';
+    const final = scoreData ? (parseFloat(scoreData.final) || 0) : 0;
+    const exScores = scoreData ? (scoreData.examinerScores || []) : [];
+    return JSON.stringify({
+      id: student.id,
+      totalActive: totalActive,
+      final: Math.round(final * 100) / 100,
+      scores: exScores.map(s => Math.round(parseFloat(s) * 100) / 100)
+    });
+  }
+
+  async function loadPresentation() {
+    try {
+      const [student, scores, criteria, examiners] = await Promise.all([
+        api('getCurrentStudent'),
+        api('getScores'),
+        api('getCriteria'),
+        api('getExaminers')
+      ]);
+
+      if (criteria && criteria.length > 0) {
+        maxTotal = criteria.reduce((sum, c) => sum + (parseFloat(c.weight) * 100 || 0), 0);
+      }
+
+      if (!student) {
+        if (currentStudentId !== null) {
+          renderWaiting();
+          currentStudentId = null;
+          currentTotal = 0;
+          currentExaminerCount = 0;
+          currentExaminerScores = [];
+          lastSnapshot = '';
+          isRevealed = false;
+          if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
+        }
+        return;
+      }
+
+      const studentScore = scores.find(s => s.id === student.id) || null;
+      const examinerScores = studentScore ? (studentScore.examinerScores || []) : [];
+      const activeExaminers = examiners.filter(e => e.active);
+      const scoredCount = examinerScores.length;
+      const totalActive = activeExaminers.length;
+      const final = studentScore ? (parseFloat(studentScore.final) || 0) : 0;
+      const allDone = scoredCount >= totalActive && totalActive > 0;
+
+      const isNewStudent = currentStudentId !== student.id;
+      const snapshot = snapshotKey(student, studentScore, totalActive);
+      const hasChanged = snapshot !== lastSnapshot;
+
+      cachedStudent = student;
+      cachedScoreData = studentScore;
+      cachedScoredCount = scoredCount;
+      cachedTotalActive = totalActive;
+
+      if (isNewStudent || !allDone) {
+        isRevealed = false;
+        if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
+      }
+
+      if (!isNewStudent && !hasChanged) return;
+
+      // Update tracking
+      currentStudentId = student.id;
+      currentTotal = final;
+      currentExaminerCount = scoredCount;
+      currentExaminerScores = examinerScores;
+      lastSnapshot = snapshot;
+
+      renderStudent(student, studentScore, scoredCount, totalActive, isNewStudent);
+    } catch (err) {
+      console.error('Failed to load:', err);
+    }
+  }
+
+  function renderWaiting() {
+    document.getElementById('main').innerHTML = `
       <div class="waiting">
         <div class="waiting-emoji">🎤</div>
         <div class="waiting-title">Menunggu peserta</div>
         <div class="waiting-sub">Admin akan memilih siswa berikutnya</div>
       </div>
-    </div>
+    `;
+    document.getElementById('status').innerHTML =
+      '<span class="status-dot"></span>Menunggu penilaian';
+  }
 
-    <div class="status" id="status">
-      <span class="status-dot"></span>Menunggu penilaian
-    </div>
-  </div>
+  function renderStudent(student, scoreData, scoredCount, totalActive, isNewStudent) {
+    const main = document.getElementById('main');
+    const statusEl = document.getElementById('status');
 
-  <script>
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbyw2vC9JWBibrjY3y60YxOmhqPfIroHIOoT_bJzuMkp1RVbZO_ThGiWoxJrVtwRT18_rw/exec';
+    if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
 
-    // ─── Audio System ───
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    document.addEventListener('click', () => {
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-    }, { once: true });
+    const final = scoreData ? scoreData.final : 0;
+    const examinerScores = scoreData ? (scoreData.examinerScores || []) : [];
+    const allDone = scoredCount >= totalActive && totalActive > 0;
 
-    function playTone(freq, duration, type = 'sine', vol = 0.08) {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-      osc.start();
-      osc.stop(audioCtx.currentTime + duration);
-    }
-    function playScoreAdded() {
-      playTone(523, 0.18);
-      setTimeout(() => playTone(659, 0.18), 80);
-    }
-    function playAllDone() {
-      playTone(523, 0.2);
-      setTimeout(() => playTone(659, 0.2), 120);
-      setTimeout(() => playTone(784, 0.3), 240);
-      setTimeout(() => playTone(1047, 0.5), 360);
-    }
+    const pct = maxTotal > 0 ? Math.min(final / maxTotal, 1) : 0;
+    const color = isRevealed ? scoreColor(pct) : '#f59e0b';
 
-    async function api(action, payload = {}) {
-      const res = await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action, ...payload })
-      });
-      return res.json();
-    }
+    const r = 110;
+    const circumference = 2 * Math.PI * r;
+    const offset = isRevealed ? circumference - (pct * circumference) : circumference * 0.25;
 
-    let currentStudentId = null;
-    let currentTotal = 0;
-    let maxTotal = 100;
-    let currentExaminerCount = 0;
-    let currentExaminerScores = [];
-    let lastSnapshot = '';
+    const didChange = (!isNewStudent && currentTotal !== final && final > 0) || justRevealed;
 
-    // ─── Fake Reveal State ───
-    let isRevealed = false;
-    let fakeNumberTimer = null;
-    let justRevealed = false;
-    let cachedStudent = null;
-    let cachedScoreData = null;
-    let cachedScoredCount = 0;
-    let cachedTotalActive = 0;
-
-    // Clock
-    setInterval(() => {
-      document.getElementById('clock').textContent =
-        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    }, 1000);
-
-    function scoreColor(pct) {
-      let r, g, b;
-      if (pct <= 0.5) {
-        const t = pct * 2;
-        r = 220; g = Math.round(50 + (140 * t)); b = 50;
-      } else {
-        const t = (pct - 0.5) * 2;
-        r = Math.round(220 - (170 * t)); g = 190; b = 50;
-      }
-      return `rgb(${r}, ${g}, ${b})`;
-    }
-
-    function snapshotKey(student, scoreData, totalActive) {
-      if (!student) return 'waiting';
-      const final = scoreData ? (parseFloat(scoreData.final) || 0) : 0;
-      const exScores = scoreData ? (scoreData.examinerScores || []) : [];
-      return JSON.stringify({
-        id: student.id,
-        totalActive: totalActive,
-        final: Math.round(final * 100) / 100,
-        scores: exScores.map(s => Math.round(parseFloat(s) * 100) / 100)
-      });
-    }
-
-    async function loadPresentation() {
-      try {
-        const [student, scores, criteria, examiners] = await Promise.all([
-          api('getCurrentStudent'),
-          api('getScores'),
-          api('getCriteria'),
-          api('getExaminers')
-        ]);
-
-        if (criteria && criteria.length > 0) {
-          maxTotal = criteria.reduce((sum, c) => sum + (parseFloat(c.weight) * 100 || 0), 0);
-        }
-
-        if (!student) {
-          if (currentStudentId !== null) {
-            renderWaiting();
-            currentStudentId = null;
-            currentTotal = 0;
-            currentExaminerCount = 0;
-            currentExaminerScores = [];
-            lastSnapshot = '';
-            isRevealed = false;
-            if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
-          }
-          return;
-        }
-
-        const studentScore = scores.find(s => s.id === student.id) || null;
-        const examinerScores = studentScore ? (studentScore.examinerScores || []) : [];
-        const activeExaminers = examiners.filter(e => e.active);
-        const scoredCount = examinerScores.length;
-        const totalActive = activeExaminers.length;
-        const final = studentScore ? (parseFloat(studentScore.final) || 0) : 0;
-        const allDone = scoredCount >= totalActive && totalActive > 0;
-
-        // ─── FIX: Declare isNewStudent BEFORE using it ───
-        const isNewStudent = currentStudentId !== student.id;
-        const snapshot = snapshotKey(student, studentScore, totalActive);
-        const hasChanged = snapshot !== lastSnapshot;
-
-        // Cache for Space reveal
-        cachedStudent = student;
-        cachedScoreData = studentScore;
-        cachedScoredCount = scoredCount;
-        cachedTotalActive = totalActive;
-
-        // Reset reveal on new student or if not all done
-        if (isNewStudent || !allDone) {
-          isRevealed = false;
-          if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
-        }
-
-        if (!isNewStudent && !hasChanged) {
-          return;
-        }
-
-        // ─── PLAY SOUND CUES ───
-        if (!isNewStudent && scoredCount > currentExaminerCount) {
-          if (allDone && !isRevealed) {
-            // Entering fake mode — silent, wait for Space reveal
-          } else if (allDone) {
-            playAllDone();
-          } else {
-            playScoreAdded();
-          }
-        }
-
-        // Update tracking
-        currentStudentId = student.id;
-        currentTotal = final;
-        currentExaminerCount = scoredCount;
-        currentExaminerScores = examinerScores;
-        lastSnapshot = snapshot;
-
-        renderStudent(student, studentScore, scoredCount, totalActive, isNewStudent);
-      } catch (err) {
-        console.error('Failed to load:', err);
-      }
-    }
-
-    function renderWaiting() {
-      document.getElementById('main').innerHTML = `
-        <div class="waiting">
-          <div class="waiting-emoji">🎤</div>
-          <div class="waiting-title">Menunggu peserta</div>
-          <div class="waiting-sub">Admin akan memilih siswa berikutnya</div>
-        </div>
-      `;
-      document.getElementById('status').innerHTML =
-        '<span class="status-dot"></span>Menunggu penilaian';
-    }
-
-    function renderStudent(student, scoreData, scoredCount, totalActive, isNewStudent) {
-      const main = document.getElementById('main');
-      const statusEl = document.getElementById('status');
-
-      // Clean up any running fake timer before rebuilding DOM
-      if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
-
-      const final = scoreData ? scoreData.final : 0;
-      const examinerScores = scoreData ? (scoreData.examinerScores || []) : [];
-      const allDone = scoredCount >= totalActive && totalActive > 0;
-      const showFake = allDone && !isRevealed;
-
-      const pct = maxTotal > 0 ? Math.min(final / maxTotal, 1) : 0;
-      const color = (allDone && isRevealed) ? scoreColor(pct) : '#f59e0b';
-
-      const r = 110;
-      const circumference = 2 * Math.PI * r;
-      const offset = (allDone && isRevealed) ? circumference - (pct * circumference) : circumference * 0.25;
-
-      const didChange = (!isNewStudent && currentTotal !== final && final > 0) || justRevealed;
-
-      // ─── Build generic examiner slots ───
-      let barsHtml = '';
-      for (let i = 0; i < totalActive; i++) {
-        const delay = (i * 0.1).toFixed(2);
-        if (i < scoredCount) {
-          if (showFake) {
-            // Fake mode: show confirmation text instead of score
-            barsHtml += `
-              <div class="bar-row" style="animation-delay: ${delay}s">
-                <div class="bar-track">
-                  <div class="bar-fill waiting" style="width: 100%;">
-                    <span class="bar-fill-text waiting-text">Penguji ${i + 1} sudah mengirim nilai ✓</span>
-                  </div>
+    // ─── Bars: hide ALL scores until revealed ───
+    let barsHtml = '';
+    for (let i = 0; i < totalActive; i++) {
+      const delay = (i * 0.1).toFixed(2);
+      if (i < scoredCount) {
+        if (isRevealed) {
+          const exScore = examinerScores[i];
+          const exPct = maxTotal > 0 ? Math.min(exScore / maxTotal, 1) : 0;
+          const exColor = scoreColor(exPct);
+          barsHtml += `
+            <div class="bar-row" style="animation-delay: ${delay}s">
+              <div class="bar-track">
+                <div class="bar-fill" id="bar-${i}"
+                  style="width: 0%; background: ${exColor};">
+                  <span class="bar-fill-text">${Number(exScore).toFixed(1)}</span>
                 </div>
-                <div class="bar-label">Penguji ${i + 1}</div>
               </div>
-            `;
-          } else {
-            const exScore = examinerScores[i];
-            const exPct = maxTotal > 0 ? Math.min(exScore / maxTotal, 1) : 0;
-            const exColor = scoreColor(exPct);
-            barsHtml += `
-              <div class="bar-row" style="animation-delay: ${delay}s">
-                <div class="bar-track">
-                  <div class="bar-fill" id="bar-${i}"
-                    style="width: 0%; background: ${exColor};">
-                    <span class="bar-fill-text">${Number(exScore).toFixed(1)}</span>
-                  </div>
-                </div>
-                <div class="bar-label">Penguji ${i + 1}<span class="check">✓</span></div>
-              </div>
-            `;
-          }
+              <div class="bar-label">Penguji ${i + 1}<span class="check">✓</span></div>
+            </div>
+          `;
         } else {
           barsHtml += `
             <div class="bar-row" style="animation-delay: ${delay}s">
               <div class="bar-track">
                 <div class="bar-fill waiting" style="width: 100%;">
-                  <span class="bar-fill-text waiting-text">Menunggu...</span>
+                  <span class="bar-fill-text waiting-text">Penguji ${i + 1} sudah mengirim nilai ✓</span>
                 </div>
               </div>
-              <div class="bar-label">Penguji ${i + 1}<span class="wait">⏳</span></div>
+              <div class="bar-label">Penguji ${i + 1}</div>
             </div>
           `;
         }
-      }
-
-      const statusText = showFake
-        ? `Semua penguji telah menilai — Tekan <b>SPASI</b> untuk membuka nilai`
-        : allDone
-          ? `${scoredCount} dari ${totalActive} penguji telah menilai`
-          : `${scoredCount} dari ${totalActive} penguji — Menunggu penilaian`;
-
-      const circleClass = (allDone && isRevealed) ? '' : 'processing';
-      const circleNumber = showFake
-        ? Math.floor(Math.random() * 46 + 50)
-        : (allDone ? (final > 0 ? Number(final).toFixed(1) : '0') : '...');
-      const circleLabel = 'Nilai Akhir';
-      const circlePct = showFake
-        ? `${scoredCount}/${totalActive}`
-        : (allDone ? Math.round(pct * 100) + '%' : scoredCount + '/' + totalActive);
-      const processingText = (allDone && isRevealed) ? '' : '<div class="processing-text">Menunggu nilai</div>';
-
-      main.innerHTML = `
-        <div class="student-header">
-          <div class="student-label">Peserta Ujian</div>
-          <div class="student-name">${escapeHtml(student.name)}</div>
-          <div class="student-id">${escapeHtml(student.id)}</div>
-        </div>
-
-        <div class="score-circle-wrap">
-          <svg class="score-circle-svg" viewBox="0 0 240 240">
-            <circle class="circle-bg" cx="120" cy="120" r="${r}"/>
-            <circle class="circle-stroke ${circleClass}" cx="120" cy="120" r="${r}"
-              stroke="${color}"
-              stroke-dasharray="${circumference}"
-              stroke-dashoffset="${circumference}"
-              id="circleStroke"/>
-          </svg>
-          <div class="circle-inner">
-            <div class="circle-number ${didChange ? 'pop' : ''}" id="circleNum"
-              style="color: ${(allDone && isRevealed) ? color : '#fbbf24'}">
-              ${circleNumber}
+      } else {
+        barsHtml += `
+          <div class="bar-row" style="animation-delay: ${delay}s">
+            <div class="bar-track">
+              <div class="bar-fill waiting" style="width: 100%;">
+                <span class="bar-fill-text waiting-text">Menunggu...</span>
+              </div>
             </div>
-            <div class="circle-label">${circleLabel}</div>
-            <div class="circle-pct">${circlePct}</div>
-            ${processingText}
+            <div class="bar-label">Penguji ${i + 1}<span class="wait">⏳</span></div>
           </div>
-        </div>
-
-        <div class="bars-section">
-          <div class="bars-title">Penilaian per Penguji</div>
-          ${barsHtml || '<div style="text-align:center;color:#52525b;font-size:0.85rem;">Belum ada penguji aktif</div>'}
-        </div>
-      `;
-
-      statusEl.innerHTML = `<span class="status-dot"></span>${statusText}`;
-
-      // Cycle random numbers in fake mode
-      if (showFake) {
-        fakeNumberTimer = setInterval(() => {
-          const num = document.getElementById('circleNum');
-          if (num) num.textContent = Math.floor(Math.random() * 46 + 50);
-        }, 400);
+        `;
       }
+    }
 
+    const statusText = isRevealed
+      ? `${scoredCount} dari ${totalActive} penguji telah menilai`
+      : allDone
+        ? `Semua penguji telah menilai — Tekan <b>SPASI</b> untuk membuka nilai`
+        : `${scoredCount} dari ${totalActive} penguji — Menunggu penilaian`;
+
+    const circleClass = isRevealed ? '' : 'processing';
+    const circleNumber = isRevealed
+      ? (final > 0 ? Number(final).toFixed(1) : '0')
+      : (allDone ? Math.floor(Math.random() * 46 + 50) : '...');
+    const circleLabel = 'Nilai Akhir';
+    const circlePct = isRevealed
+      ? Math.round(pct * 100) + '%'
+      : scoredCount + '/' + totalActive;
+    const processingText = isRevealed ? '' : '<div class="processing-text">Menunggu nilai</div>';
+
+    main.innerHTML = `
+      <div class="student-header">
+        <div class="student-label">Peserta Ujian</div>
+        <div class="student-name">${escapeHtml(student.name)}</div>
+        <div class="student-id">${escapeHtml(student.id)}</div>
+      </div>
+
+      <div class="score-circle-wrap">
+        <svg class="score-circle-svg" viewBox="0 0 240 240">
+          <circle class="circle-bg" cx="120" cy="120" r="${r}"/>
+          <circle class="circle-stroke ${circleClass}" cx="120" cy="120" r="${r}"
+            stroke="${color}"
+            stroke-dasharray="${circumference}"
+            stroke-dashoffset="${circumference}"
+            id="circleStroke"/>
+        </svg>
+        <div class="circle-inner">
+          <div class="circle-number ${didChange ? 'pop' : ''}" id="circleNum"
+            style="color: ${isRevealed ? color : '#fbbf24'}">
+            ${circleNumber}
+          </div>
+          <div class="circle-label">${circleLabel}</div>
+          <div class="circle-pct">${circlePct}</div>
+          ${processingText}
+        </div>
+      </div>
+
+      <div class="bars-section">
+        <div class="bars-title">Penilaian per Penguji</div>
+        ${barsHtml || '<div style="text-align:center;color:#52525b;font-size:0.85rem;">Belum ada penguji aktif</div>'}
+      </div>
+    `;
+
+    statusEl.innerHTML = `<span class="status-dot"></span>${statusText}`;
+
+    if (!isRevealed && allDone) {
+      fakeNumberTimer = setInterval(() => {
+        const num = document.getElementById('circleNum');
+        if (num) num.textContent = Math.floor(Math.random() * 46 + 50);
+      }, 400);
+    }
+
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!showFake) {
-            examinerScores.forEach((exScore, idx) => {
-              const exPct = maxTotal > 0 ? Math.min(exScore / maxTotal, 1) : 0;
-              const bar = document.getElementById(`bar-${idx}`);
-              if (bar) bar.style.width = Math.max(exPct * 100, 3) + '%';
-            });
-          }
-          const stroke = document.getElementById('circleStroke');
-          if (stroke) stroke.style.strokeDashoffset = offset;
-        });
+        if (isRevealed) {
+          examinerScores.forEach((exScore, idx) => {
+            const exPct = maxTotal > 0 ? Math.min(exScore / maxTotal, 1) : 0;
+            const bar = document.getElementById(`bar-${idx}`);
+            if (bar) bar.style.width = Math.max(exPct * 100, 3) + '%';
+          });
+        }
+        const stroke = document.getElementById('circleStroke');
+        if (stroke) stroke.style.strokeDashoffset = offset;
       });
-
-      if (didChange) {
-        setTimeout(() => {
-          const num = document.getElementById('circleNum');
-          if (num) num.classList.remove('pop');
-        }, 400);
-      }
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-
-    // ─── Space Reveal ───
-    document.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && !isRevealed && cachedStudent && cachedScoredCount >= cachedTotalActive && cachedTotalActive > 0) {
-        e.preventDefault();
-        isRevealed = true;
-        if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
-        justRevealed = true;
-        playAllDone();
-        renderStudent(cachedStudent, cachedScoreData, cachedScoredCount, cachedTotalActive, false);
-        justRevealed = false;
-      }
     });
 
-    loadPresentation();
-    setInterval(loadPresentation, 5000);
-  </script>
+    if (didChange) {
+      setTimeout(() => {
+        const num = document.getElementById('circleNum');
+        if (num) num.classList.remove('pop');
+      }, 400);
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && !isRevealed && cachedStudent && cachedScoredCount >= cachedTotalActive && cachedTotalActive > 0) {
+      e.preventDefault();
+      isRevealed = true;
+      if (fakeNumberTimer) { clearInterval(fakeNumberTimer); fakeNumberTimer = null; }
+      justRevealed = true;
+      playAllDone();
+      renderStudent(cachedStudent, cachedScoreData, cachedScoredCount, cachedTotalActive, false);
+      justRevealed = false;
+    }
+  });
+
+  loadPresentation();
+  setInterval(loadPresentation, 5000);
+</script>
 </body>
 </html>
